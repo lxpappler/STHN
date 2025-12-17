@@ -23,6 +23,12 @@ import logging
 from myevaluate import evaluate_SNet
 
 def main(args):
+    # ================== 【打印所有配置参数】 ==================
+    print("\n" + "="*20 + " Experiment Configuration " + "="*20)
+    for arg, value in sorted(vars(args).items()):
+        print(f"{arg}: {value}")
+    print("="*60 + "\n")
+    # ======================================================
     model = STHN(args, for_training=True)
     logging.info(f"Parameter Count: {count_parameters(model.netG)}")
 
