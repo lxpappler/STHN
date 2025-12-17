@@ -75,6 +75,7 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, train_step
         image1, image2, flow, _, query_utm, database_utm, _, _  = [x for x in data_blob]
         model.set_input(image1, image2, flow)
         metrics = model.optimize_parameters()
+
         if i_batch==0 and args.vis_all:
             save_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img1.png')
             save_img(torchvision.utils.make_grid(model.image_2, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img2.png')
@@ -109,6 +110,17 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, train_step
         metrics["lr"] = model.scheduler_G.get_lr()
         toc = time.time()
         metrics['time'] = toc - tic
+
+        if total_steps % 50 == 0:
+            # 获取当前时间
+            current_time = time.strftime("%H:%M:%S", time.localtime())
+            # 格式化打印
+            print(f"[{current_time}] "
+                  f"Step [{total_steps}/{args.num_steps}] "
+                  f"Loss: {metrics['G_loss']:.4f} | "
+                  f"MACE: {metrics['mace']:.4f} | "
+                  f"LR: {metrics['lr'][0]:.2e}")
+            
         wandb.log({
                 "mace": metrics["mace"],
                 "lr": metrics["lr"][0],
@@ -148,6 +160,12 @@ def validate(model, args, total_steps):
     results = {}
     # Evaluate results
     results.update(validate_process(model, args, total_steps))
+
+    print("\n" + "="*40)
+    print(f" >>> Validation at Step {total_steps}")
+    print(f" >>> Val MACE: {results['val_mace']:.4f}")
+    print("="*40 + "\n")
+
     wandb.log({
                 "val_mace": results['val_mace'],
             })
