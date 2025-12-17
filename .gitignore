@@ -1,0 +1,18 @@
+# 忽略 Python 编译缓存
+__pycache__/
+*.pyc
+
+# 忽略数据集 (一定要忽略！)
+datasets/
+
+# 忽略巨大的模型权重文件
+*.pth
+checkpoints/
+
+# 忽略日志和输出文件
+*.out
+logs/
+wandb/
+
+# 忽略系统文件
+.DS_Store
