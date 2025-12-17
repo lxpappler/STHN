@@ -8,5 +8,17 @@ conda activate py310-sthn
 # 禁用 wandb
 export WANDB_MODE=offline
 
-# 运行训练脚本
-python3 ./local_pipeline/train_4cor.py --dataset_name satellite_0_thermalmapping_135 2>train_ori.err | tee train_ori.out
+# ===== 实验参数 =====
+DATASET=satellite_0_thermalmapping_135
+D_C=128
+
+echo "PID=$!"
+echo "Running with: DATASET=$DATASET D_C=$D_C"
+
+# ===== 运行 =====
+python3 ./local_pipeline/train_4cor.py \
+  --dataset_name ${DATASET} \
+  --val_positive_dist_threshold ${D_C} \
+  --val_freq 2000 \
+  1> train_${D_C}.out \
+  2> >(tee train_${D_C}.err >&2)
