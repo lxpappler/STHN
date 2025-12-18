@@ -29,6 +29,8 @@ def main(args):
         print(f"{arg}: {value}")
     print("="*60 + "\n")
     # ======================================================
+    patience = 5            # 容忍度：允许连续 5 次验证不下降
+    early_stop_counter = 0  # 计数器：当前连续失败次数
     model = STHN(args, for_training=True)
     logging.info(f"Parameter Count: {count_parameters(model.netG)}")
 
@@ -63,9 +65,15 @@ def main(args):
     total_steps = 0
     last_best_val_mace = None
     while total_steps <= args.num_steps:
-        total_steps, last_best_val_mace = train(model, train_loader, args, total_steps, last_best_val_mace)
+        total_steps, last_best_val_mace, early_stop_counter = train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience)
+        if early_stop_counter >= patience:
+            logging.info("Training stopped by Early Stopping in main loop.")
+            break
         if extended_loader is not None:
-            total_steps, last_best_val_mace = train(model, extended_loader, args, total_steps, last_best_val_mace, train_step_limit=len(train_loader))
+            total_steps, last_best_val_mace,early_stop_counter = train(model, extended_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, train_step_limit=len(train_loader))
+            if early_stop_counter >= patience:
+                logging.info("Training stopped by Early Stopping in main loop.")
+                break
 
     test_dataset = datasets.fetch_dataloader(args, split='test')
     model_med = torch.load(args.save_dir + f'/{args.name}.pth')
@@ -74,7 +82,7 @@ def main(args):
         model.netG_fine.load_state_dict(model_med['netG_fine'], strict=True)
     evaluate_SNet(model, test_dataset, batch_size=args.batch_size, args=args, wandb_log=True)
 
-def train(model, train_loader, args, total_steps, last_best_val_mace, train_step_limit = None):
+def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience,train_step_limit = None):
     count = 0
     for i_batch, data_blob in enumerate(tqdm(train_loader)):
         tic = time.time()
@@ -134,6 +142,7 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, train_step
                 "ce_loss": metrics["ce_loss"],
             },)
         total_steps += 1
+
         # Validate
         if total_steps % args.val_freq == args.val_freq - 1:
             current_val_mace = validate(model, args, total_steps)
@@ -145,13 +154,23 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, train_step
                 "netG_fine": model.netG_fine.state_dict() if args.two_stages else None,
             }
             torch.save(checkpoint, PATH)
+
             if last_best_val_mace is None or last_best_val_mace > current_val_mace:
                 logging.info(f"Saving best model, last_best_val_mace: {last_best_val_mace}, current_val_mace: {current_val_mace}")
                 last_best_val_mace = current_val_mace
                 PATH = args.save_dir + f'/{args.name}.pth'
                 torch.save(checkpoint, PATH)
+                early_stop_counter = 0  # 重置计数器
+
             else:
+                early_stop_counter += 1
+                logging.info(f"EarlyStopping counter: {early_stop_counter} out of {patience}")
                 logging.info(f"No Saving, last_best_val_mace: {last_best_val_mace}, current_val_mace: {current_val_mace}")
+                if early_stop_counter >= patience:
+                    logging.info("="*40)
+                    logging.info("Early stopping triggered!")
+                    logging.info("="*40)
+                    break
 
         if total_steps >= args.num_steps:
             break
@@ -160,7 +179,7 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, train_step
             break
         else:
             count += 1
-    return total_steps, last_best_val_mace
+    return total_steps, last_best_val_mace, early_stop_counter
 
 def validate(model, args, total_steps):
     results = {}
