@@ -29,7 +29,7 @@ def main(args):
         print(f"{arg}: {value}")
     print("="*60 + "\n")
     # ======================================================
-    patience = 5            # 容忍度：允许连续 5 次验证不下降
+    patience = 150            # 容忍度：相当于不早停了
     early_stop_counter = 0  # 计数器：当前连续失败次数
     model = STHN(args, for_training=True)
     logging.info(f"Parameter Count: {count_parameters(model.netG)}")

@@ -335,7 +335,7 @@ class MYDATA(homo_dataset):
         ).astype(float)
 
         # Find soft_positives_per_query, which are within val_positive_dist_threshold (deafult 25 meters)
-        knn = NearestNeighbors(n_jobs=-1)
+        knn = NearestNeighbors(n_jobs=1)
         knn.fit(self.database_utms)
         self.soft_positives_per_query = knn.radius_neighbors(
             self.queries_utms,
@@ -345,7 +345,7 @@ class MYDATA(homo_dataset):
 
         # Find hard_negatives_per_query. Hard negative is out of prior position threshold and we don't care
         if args.prior_location_threshold != -1:
-            knn = NearestNeighbors(n_jobs=-1)
+            knn = NearestNeighbors(n_jobs=1)
             knn.fit(self.database_utms)
             self.hard_negatives_per_query = knn.radius_neighbors(
                 self.queries_utms,
