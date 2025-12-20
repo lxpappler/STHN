@@ -22,7 +22,7 @@ from uuid import uuid4
 import logging
 from myevaluate import evaluate_SNet
 
-def main(args):
+def main(args, start_time):
     # ================== 【打印所有配置参数】 ==================
     print("\n" + "="*20 + " Experiment Configuration " + "="*20)
     for arg, value in sorted(vars(args).items()):
@@ -65,12 +65,12 @@ def main(args):
     total_steps = 0
     last_best_val_mace = None
     while total_steps <= args.num_steps:
-        total_steps, last_best_val_mace, early_stop_counter = train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience)
+        total_steps, last_best_val_mace, early_stop_counter = train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time=start_time)
         if early_stop_counter >= patience:
             logging.info("Training stopped by Early Stopping in main loop.")
             break
         if extended_loader is not None:
-            total_steps, last_best_val_mace,early_stop_counter = train(model, extended_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, train_step_limit=len(train_loader))
+            total_steps, last_best_val_mace,early_stop_counter = train(model, extended_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time=start_time, train_step_limit=len(train_loader))
             if early_stop_counter >= patience:
                 logging.info("Training stopped by Early Stopping in main loop.")
                 break
@@ -82,7 +82,7 @@ def main(args):
         model.netG_fine.load_state_dict(model_med['netG_fine'], strict=True)
     evaluate_SNet(model, test_dataset, batch_size=args.batch_size, args=args, wandb_log=True)
 
-def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience,train_step_limit = None):
+def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time, train_step_limit = None):
     count = 0
     for i_batch, data_blob in enumerate(tqdm(train_loader)):
         tic = time.time()
@@ -126,10 +126,13 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop
         metrics['time'] = toc - tic
 
         if total_steps % 50 == 0:
-            # 获取当前时间
-            current_time = time.strftime("%H:%M:%S", time.localtime())
+            # 计算耗时：当前时间 - 开始时间
+            elapsed_time = datetime.now() - start_time
+            # 将 timedelta 对象转换为字符串，格式通常为 "H:M:S.microseconds"
+            # 使用 .split('.')[0] 去掉微秒部分，只保留 时:分:秒
+            elapsed_str = str(elapsed_time).split('.')[0]
             # 格式化打印
-            print(f"[{current_time}] "
+            print(f"[{elapsed_str}] "
                   f"Step [{total_steps}/{args.num_steps}] "
                   f"Loss: {metrics['G_loss']:.4f} | "
                   f"MACE: {metrics['mace']:.4f} | "
@@ -210,4 +213,4 @@ if __name__ == "__main__":
 
     wandb.init(project="STHN", entity="xjh19971", config=vars(args))
         
-    main(args)
+    main(args, start_time)
