@@ -1,5 +1,5 @@
 # 选择 GPU
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=5
 
 # 初始化 conda
 eval "$(/Share/data/liuxp/anaconda3/bin/conda shell.bash hook)"
@@ -15,15 +15,17 @@ export NUMEXPR_NUM_THREADS=4
 
 # ===== 实验参数 =====
 DATASET=satellite_0_thermalmapping_135_train
-D_C=512
+D_C=50
+B_S=16
 
-echo "Running with: DATASET=$DATASET D_C=$D_C"
+echo "Running with: DATASET=$DATASET D_C=$D_C B_S=$B_S"
 
 # ===== 运行 =====
 python3 ./local_pipeline/train_4cor.py \
   --dataset_name ${DATASET} \
   --val_positive_dist_threshold ${D_C} \
+  --batch_size ${B_S} \
   --val_freq 2000 \
-  --database_size 1536 --num_steps 300000 --corr_level 4 --num_workers 16 \
-  1> train_larger_${D_C}.out \
-  2> >(tee train_larger_${D_C}.err >&2)
+  --database_size 1536 --corr_level 4 \
+  1> train_larger_${D_C}_bs${B_S}.out \
+  2> >(tee train_larger_${D_C}_bs${B_S}.err >&2)
