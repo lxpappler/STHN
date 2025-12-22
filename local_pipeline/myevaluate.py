@@ -103,7 +103,7 @@ def evaluate_SNet(model, val_dataset, batch_size=0, args = None, wandb_log=False
                      args.save_dir + "/b2_epoch_" + str(i_batch).zfill(5) + "_finaleval_" + '.png')
 
         if not args.identity:
-            model.set_input(img1, img2, flow_gt, image1_ori)
+            model.set_input(img1, img2, flow_gt)
             flow_4cor = torch.zeros((flow_gt.shape[0], 2, 2, 2))
             flow_4cor[:, :, 0, 0] = flow_gt[:, :, 0, 0]
             flow_4cor[:, :, 0, 1] = flow_gt[:, :, 0, -1]

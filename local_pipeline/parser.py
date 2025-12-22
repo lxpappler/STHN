@@ -59,6 +59,7 @@ def parse_arguments():
     parser.add_argument('--perspective_max', type=float, default=0)
     parser.add_argument("--generate_test_pairs", action='store_true')
     parser.add_argument("--load_test_pairs", type=str, default=None)
+    parser.add_argument('--multi_aug_eval', action='store_true', help='Enable multi-augmentation evaluation')
     args = parser.parse_args()
     args.save_dir = "local_he"
     args.augment_type = "center"
