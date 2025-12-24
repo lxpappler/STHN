@@ -499,6 +499,37 @@ class MYDATA(homo_dataset):
 
 def fetch_dataloader(args, split='train'):
     train_dataset = MYDATA(args, args.datasets_folder, args.dataset_name, split)
+
+        # [新增逻辑] 迷你基准测试开关
+    is_quick_debug = True  # <--- 正式跑全量时请改为 False
+    
+    if is_quick_debug:
+        total_len = len(train_dataset)
+        # 核心修改：使用固定种子的随机生成器
+        # 作用：确保每次运行（无论是跑Baseline还是SE），取出的“随机”图片都是同一批
+        # 这样你的对比才公平，否则可能是因为这一批图简单导致MACE低。
+        g_cpu = torch.Generator()
+        g_cpu.manual_seed(2024) # 你可以随意改这个数字，但要保持一致
+        
+        if split == 'train':
+            # 训练集：随机抽取 2000 张（增加多样性）
+            limit = min(2000, total_len)
+            # randperm 生成 0 到 total_len-1 的随机乱序索引，取前 limit 个
+            indices = torch.randperm(total_len, generator=g_cpu)[:limit].tolist()
+            train_dataset = torch.utils.data.Subset(train_dataset, indices)
+            logging.info(f"[DEBUG] Randomly sampled {limit} images for TRAIN set (Seed 2024).")
+            
+        elif split == 'val' or split == 'test':
+            # 验证集：随机抽取 500 张
+            # 注意：这里的随机种子也是 2024，但因为生成器状态是独立的，
+            # 如果你想让验证集和训练集绝对不重叠（在 split='train' 和 'val' 实际上是加载不同文件的情况下没问题），
+            # 如果是同一文件划分，Subset 会自动处理。
+            # 这里的逻辑是针对 datasets_4cor_img.py 的实现，split不同加载的文件不同，所以互不干扰。
+            limit = min(500, total_len)
+            indices = torch.randperm(total_len, generator=g_cpu)[:limit].tolist()
+            train_dataset = torch.utils.data.Subset(train_dataset, indices)
+            logging.info(f"[DEBUG] Randomly sampled {limit} images for VAL/TEST set (Seed 2024).")
+
     if split == 'train' or split == 'extended':
         train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                         pin_memory=True, shuffle=True, num_workers=args.num_workers,
