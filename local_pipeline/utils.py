@@ -11,7 +11,7 @@ from PIL import Image
 import logging
 import wandb
 import matplotlib.pyplot as plt
-from datasets_4cor_img import inv_base_transforms
+from local_pipeline.datasets_4cor_img import inv_base_transforms
 import torchvision
 import cv2
 

@@ -1,22 +1,34 @@
+import os
+import sys
+import time
+import random
+import logging
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+import wandb
+
 import kornia.geometry.transform as tgm
 import kornia.geometry.bbox as bbox
-from update import GMA
-from extractor import BasicEncoderQuarter
-from corr import CorrBlock
-from utils import coords_grid, sequence_loss, single_loss, fetch_optimizer, warp
-import os
-import sys
-from model.sync_batchnorm import convert_model
-import wandb
-import torchvision
-import random
-import time
-import logging
-import datasets_4cor_img as datasets
-import numpy as np
+
+# ===== package absolute imports =====
+from local_pipeline.update import GMA
+from local_pipeline.extractor import BasicEncoderQuarter
+from local_pipeline.corr import CorrBlock
+from local_pipeline.utils import (
+    coords_grid,
+    sequence_loss,
+    single_loss,
+    fetch_optimizer,
+    warp,
+)
+from local_pipeline.model.sync_batchnorm import convert_model
+import local_pipeline.datasets_4cor_img as datasets
+# ====================================
+
 
 autocast = torch.cuda.amp.autocast
 class IHN(nn.Module):

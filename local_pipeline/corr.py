@@ -1,8 +1,17 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-from utils import *
+# import math
+# from utils import *
+# from utils import bilinear_sampler, coords_grid
+# 修改前: from utils import *
+# 修改后: 
+# local_pipeline/corr.py
+# try:
+#     # 显式导入你在这个文件中用到的所有工具
+#     from .utils import bilinear_sampler, coords_grid, warp
+# except ImportError:
+from local_pipeline.utils import bilinear_sampler, coords_grid, warp
 import time
 
 try:
