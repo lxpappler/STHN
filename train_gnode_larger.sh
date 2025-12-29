@@ -1,5 +1,5 @@
 # 选择 GPU
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=1
 
 # 初始化 conda
 eval "$(/Share/data/liuxp/anaconda3/bin/conda shell.bash hook)"
@@ -17,7 +17,7 @@ export NUMEXPR_NUM_THREADS=4
 DATASET=satellite_0_thermalmapping_135_train
 D_C=512
 B_S=32
-RUN_NAME=gnode_larger_${D_C}_mini_32
+RUN_NAME=minitrain_norm_32
 
 echo "Running with: DATASET=$DATASET D_C=$D_C B_S=$B_S RUN_NAME=$RUN_NAME"
 

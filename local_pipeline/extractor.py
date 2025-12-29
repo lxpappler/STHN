@@ -257,6 +257,9 @@ class BasicEncoderQuarter(nn.Module):
         x = F.max_pool2d(x, 2, stride=2)
         x = self.layer3(x)
         x = self.conv2(x)
+        # add
+        x = F.normalize(x, dim=1)
+        
         if self.training and self.dropout is not None:
             x = self.dropout(x)
         if is_list:
