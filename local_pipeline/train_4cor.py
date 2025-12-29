@@ -204,23 +204,20 @@ if __name__ == "__main__":
     args = parser.parse_arguments()
     start_time = datetime.now()
 
-    timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+    # timestamp = start_time.strftime("%Y%m%d_%H%M%S")
     run_name = args.run_name
-    custom_id = f"{timestamp}_{run_name}"
+    # custom_id = f"{timestamp}_{run_name}"
 
 
-    local_log_path = f"./logs/local_he/{custom_id}"
+    local_log_path = f"./logs/local_he/{run_name}"
     args.save_dir = local_log_path
     commons.setup_logging(args.save_dir, console='info')
     setup_seed(0)
 
     wandb.init(
-        id=custom_id,           # 关键：手动指定 ID
+        id=run_name,           # 关键：手动指定 ID
         name=run_name,         # 同时也把这个 ID 设置为网页显示的名称
         config=vars(args)
     )
-
-    print(f"W&B 文件夹将包含 ID: {custom_id}")
-    print(f"本地日志目录: {local_log_path}")
         
     main(args, start_time)
