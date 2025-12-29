@@ -203,14 +203,24 @@ def validate(model, args, total_steps):
 if __name__ == "__main__":
     args = parser.parse_arguments()
     start_time = datetime.now()
-    args.save_dir = join(
-    "logs",
-    args.save_dir,
-    f"{args.dataset_name}-{start_time.strftime('%Y-%m-%d_%H-%M-%S')}-{uuid4()}",
-    )
+
+    timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+    run_name = args.run_name
+    custom_id = f"{timestamp}_{run_name}"
+
+
+    local_log_path = f"./logs/local_he/{custom_id}"
+    args.save_dir = local_log_path
     commons.setup_logging(args.save_dir, console='info')
     setup_seed(0)
 
-    wandb.init(project="STHN", entity="xjh19971", config=vars(args))
+    wandb.init(
+        id=custom_id,           # 关键：手动指定 ID
+        name=run_name,         # 同时也把这个 ID 设置为网页显示的名称
+        config=vars(args)
+    )
+
+    print(f"W&B 文件夹将包含 ID: {custom_id}")
+    print(f"本地日志目录: {local_log_path}")
         
     main(args, start_time)

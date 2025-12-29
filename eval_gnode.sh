@@ -1,5 +1,5 @@
 # 选择 GPU
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=3
 
 # 初始化 conda
 eval "$(/Share/data/liuxp/anaconda3/bin/conda shell.bash hook)"
@@ -14,9 +14,9 @@ export MKL_NUM_THREADS=4
 export NUMEXPR_NUM_THREADS=4
 
 # ===== 实验参数 =====
-DATASET=satellite_0_thermalmapping_135
+DATASET=satellite_0_thermalmapping_135_train
 D_C=512
-MODEL=checkpoints/1536_one_stage
+MODEL=logs/local_he/20251229_024813_gnode_larger_512_mini_32
 
 echo "Running with: DATASET=$DATASET D_C=$D_C MODEL=$MODEL"
 
@@ -28,7 +28,5 @@ python3 ./local_pipeline/myevaluate.py \
     --val_positive_dist_threshold ${D_C} \
     --lev0 --database_size 1536 --corr_level 4 \
     --test \
-    --multi_aug_eval \
-    --augment img --perspective_max 16 --rotate_max 0.523599 --resize_max 0.3 \
-    1> eval_${D_C}_aug.out \
-    2> >(tee eval_${D_C}_aug.err >&2)
+    1> eval.out \
+    2> >(tee eval.err >&2)

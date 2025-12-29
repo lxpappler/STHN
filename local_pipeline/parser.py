@@ -60,6 +60,7 @@ def parse_arguments():
     parser.add_argument("--generate_test_pairs", action='store_true')
     parser.add_argument("--load_test_pairs", type=str, default=None)
     parser.add_argument('--multi_aug_eval', action='store_true', help='Enable multi-augmentation evaluation')
+    parser.add_argument('--run_name', type=str, default='default_run', help='W&B run name')
     args = parser.parse_args()
     args.save_dir = "local_he"
     args.augment_type = "center"

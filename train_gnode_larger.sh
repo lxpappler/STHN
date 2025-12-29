@@ -1,5 +1,5 @@
 # 选择 GPU
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=3
 
 # 初始化 conda
 eval "$(/Share/data/liuxp/anaconda3/bin/conda shell.bash hook)"
@@ -17,8 +17,9 @@ export NUMEXPR_NUM_THREADS=4
 DATASET=satellite_0_thermalmapping_135_train
 D_C=512
 B_S=32
+RUN_NAME=gnode_larger_${D_C}_mini_32
 
-echo "Running with: DATASET=$DATASET D_C=$D_C B_S=$B_S"
+echo "Running with: DATASET=$DATASET D_C=$D_C B_S=$B_S RUN_NAME=$RUN_NAME"
 
 # ===== 运行 =====
 python3 -u ./local_pipeline/train_4cor.py \
@@ -27,5 +28,6 @@ python3 -u ./local_pipeline/train_4cor.py \
   --batch_size ${B_S} \
   --num_steps 10000 --val_freq 1000 --lr 1e-4 \
   --database_size 1536 --corr_level 4 \
-  1> train_larger_${D_C}_mini_32.out \
-  2> >(tee train_larger_${D_C}_mini_32.err >&2)
+  --run_name ${RUN_NAME} \
+  1> ${RUN_NAME}.out \
+  2> >(tee ${RUN_NAME}.err >&2)
