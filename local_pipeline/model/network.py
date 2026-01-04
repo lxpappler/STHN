@@ -344,11 +344,12 @@ class STHN():
         """Update learning rates for all the networks; called at the end of every epoch"""
         self.scheduler_G.step()
 
+# 将卫星图投影变化回热红外图 ？？？
 def mywarp(x, flow_pred, four_point_org_single, ue_std=None):
     """
     warp an image/tensor (im2) back to im1, according to the optical flow
     x: [B, C, H, W] (im2)
-    flo: [B, 2, H, W] flow
+    flow: [B, 2, H, W] 
     """
     if not torch.isnan(flow_pred).any():
         if flow_pred.shape[-1] != 2:

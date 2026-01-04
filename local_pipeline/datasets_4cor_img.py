@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 import torch.utils.data as data
-import kornia.geometry.transform as tgm
+import kornia.geometry.transform as tgm # 用于单应性变换和投影计算
 
 import random
 from glob import glob
@@ -18,13 +18,15 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
 from tqdm import tqdm
 import math
-Image.MAX_IMAGE_PIXELS = None
+Image.MAX_IMAGE_PIXELS = None   # 解除大图像像素限制
 marginal = 0
 # patch_size = 256
 
+# ImageNet 标准归一化参数
 imagenet_mean = [0.485, 0.456, 0.406]
 imagenet_std = [0.229, 0.224, 0.225]
 
+# 验证集坐标范围
 TB_val_region = [2650, 5650, 5100, 9500]
 
 inv_base_transforms = transforms.Compose(
@@ -48,9 +50,9 @@ class homo_dataset(data.Dataset):
 
         self.args = args
         self.is_test = False
-        self.image_list_img1 = []
-        self.image_list_img2 = []
-        self.dataset=[]
+        self.image_list_img1 = []   # 初始化查询图像列表 query
+        self.image_list_img2 = []   # 初始化数据库图像列表 database
+        self.dataset=[] # 数据集存储
         self.augment = augment
         if self.augment: # EVAL
             if self.args.eval_model is not None:
@@ -62,21 +64,28 @@ class homo_dataset(data.Dataset):
                 self.augment_type.append("rotate")
             if self.args.resize_max > 0:
                 self.augment_type.append("resize")
+        # 调整大小
         self.base_transform = transforms.Compose(
             [
                 transforms.Resize([self.args.resize_width, self.args.resize_width]),
             ]
         )
+        # 热红外查询图转灰度张量
         self.query_transform = transforms.Compose(
             [
                 transforms.Grayscale(num_output_channels=3),
                 transforms.ToTensor()
             ]
         )
-        
+    
+    # 旋转增强函数
     def rotate_transform(self, rotation, four_point_org, four_point_1, four_point_org_augment, four_point_1_augment):
         center_x_org = torch.tensor((self.args.resize_width - 1)/2)
         center_x_1 = (four_point_1[0, 0, :] + four_point_1[0, 3, :])/2
+
+        # 对 four_point_org 的四个顶点依次应用旋转矩阵公式：
+        # x' = (x-cx)cosθ - (y-cy)sinθ + cx
+        # y' = (x-cx)sinθ + (y-cy)cosθ + cy
         four_point_org_augment[0, 0, 0] = (four_point_org[0, 0, 0] - center_x_org) * torch.cos(rotation) - (four_point_org[0, 0, 1] - center_x_org) * torch.sin(rotation) + center_x_org
         four_point_org_augment[0, 0, 1] = (four_point_org[0, 0, 0] - center_x_org) * torch.sin(rotation) + (four_point_org[0, 0, 1] - center_x_org) * torch.cos(rotation) + center_x_org
         four_point_org_augment[0, 1, 0] = (four_point_org[0, 1, 0] - center_x_org) * torch.cos(rotation) - (four_point_org[0, 1, 1] - center_x_org) * torch.sin(rotation) + center_x_org
@@ -98,6 +107,7 @@ class homo_dataset(data.Dataset):
         # print("center:", center_x_1, four_point_1[0, 0, :], four_point_1[0, 3, :])
         return four_point_org_augment, four_point_1_augment
 
+    # 缩放增强函数
     def resize_transform(self, scale_factor, beta, alpha, four_point_org_augment, four_point_1_augment):
         offset = self.args.resize_width * (1 - scale_factor) / 2
         four_point_org_augment[0, 0, 0] += offset
@@ -119,25 +129,28 @@ class homo_dataset(data.Dataset):
         return four_point_org_augment, four_point_1_augment
 
     def __getitem__(self, query_PIL_image, database_PIL_image, query_utm, database_utm, index, pos_index, neg_img2=None):
+        # 初始化随机数种子，确保多进程安全 ？？？
         if hasattr(self, "rng") and self.rng is None:
             worker_info = torch.utils.data.get_worker_info()
             self.rng = np.random.default_rng(seed=worker_info.id)
 
+        # PIL ？？？
         img1 = query_PIL_image
         img2 = database_PIL_image # img1 warp to img2
 
         height, width = img1.size
-        t = np.float32(np.array(query_utm - database_utm))
-        t[0][0], t[0][1] = t[0][1], t[0][0] # Swap!
+        t = np.float32(np.array(query_utm - database_utm)) # 物理坐标系utm下的偏移量
+        t[0][0], t[0][1] = t[0][1], t[0][0] # Swap! 因为 UTM 的 (Easting, Northing) 对应图像坐标系的 (宽度, 高度)
         
         # img1, img2, img2_ori = self.query_transform(img1), self.database_transform(img2), self.database_transform_ori(img2)
-        img1 = self.query_transform(img1)
-        alpha = self.args.database_size / self.args.resize_width
-        t = t / alpha # align with the resized image
+        img1 = self.query_transform(img1) # 热红外图转灰度三通道张量
+        alpha = self.args.database_size / self.args.resize_width # 计算物理坐标到网络输入的比例
+        t = t / alpha # align with the resized image # 像素坐标系下的偏移量 ？？？
         
         t_tensor = torch.Tensor(t).squeeze(0)
         y_grid, x_grid = np.mgrid[0:self.args.resize_width, 0:self.args.resize_width]
         point = np.vstack((x_grid.flatten(), y_grid.flatten())).transpose()
+        # 热红外图四个角点相对于top_left的坐标
         four_point_org = torch.zeros((2, 2, 2))
         top_left = torch.Tensor([0, 0])
         top_right = torch.Tensor([self.args.resize_width - 1, 0])
@@ -147,6 +160,7 @@ class homo_dataset(data.Dataset):
         four_point_org[:, 0, 1] = top_right
         four_point_org[:, 1, 0] = bottom_left
         four_point_org[:, 1, 1] = bottom_right
+        # 热红外图四个角点在参考图中的坐标
         four_point_1 = torch.zeros((2, 2, 2))
         if self.args.database_size == 512:
             four_point_1[:, 0, 0] = t_tensor + top_left
@@ -257,6 +271,7 @@ class homo_dataset(data.Dataset):
         img1 = transforms.CenterCrop(self.args.crop_width)(img1)
         img1 = self.base_transform(img1)
 
+        # 计算img1到img2的单应性矩阵
         H = tgm.get_perspective_transform(four_point_org, four_point_1)
         H = H.squeeze()
         
@@ -335,6 +350,7 @@ class MYDATA(homo_dataset):
         ).astype(float)
 
         # Find soft_positives_per_query, which are within val_positive_dist_threshold (deafult 25 meters)
+        # 使用 KNN 算法寻找物理位置上的正样本
         knn = NearestNeighbors(n_jobs=1)
         knn.fit(self.database_utms)
         self.soft_positives_per_query = knn.radius_neighbors(
