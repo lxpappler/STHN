@@ -17,7 +17,7 @@ export NUMEXPR_NUM_THREADS=4
 DATASET=satellite_0_thermalmapping_135_train
 D_C=512
 B_S=16
-RUN_NAME=minitrain_bs16_vis_500
+RUN_NAME=minitrain_bs16_vis_100_2
 
 echo "Running with: DATASET=$DATASET D_C=$D_C B_S=$B_S RUN_NAME=$RUN_NAME"
 

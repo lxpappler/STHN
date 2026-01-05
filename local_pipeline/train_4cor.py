@@ -66,11 +66,17 @@ def main(args, start_time):
     last_best_val_mace = None
     while total_steps <= args.num_steps:
         total_steps, last_best_val_mace, early_stop_counter = train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time=start_time)
+        if total_steps >= 100:
+            print("Debug stop in main loop")
+            break
         if early_stop_counter >= patience:
             logging.info("Training stopped by Early Stopping in main loop.")
             break
         if extended_loader is not None:
             total_steps, last_best_val_mace,early_stop_counter = train(model, extended_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time=start_time, train_step_limit=len(train_loader))
+            if total_steps >= 100:
+                print("Debug stop in main loop")
+                break
             if early_stop_counter >= patience:
                 logging.info("Training stopped by Early Stopping in main loop.")
                 break
@@ -124,8 +130,7 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop
         metrics["lr"] = model.scheduler_G.get_lr()
         toc = time.time()
         metrics['time'] = toc - tic
-        if total_steps >= 500:  # 比如 2 或 5
-            break
+
         if total_steps % 50 == 0:
             # 计算耗时：当前时间 - 开始时间
             elapsed_time = datetime.now() - start_time
