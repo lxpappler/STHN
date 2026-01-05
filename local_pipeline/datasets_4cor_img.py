@@ -134,7 +134,6 @@ class homo_dataset(data.Dataset):
             worker_info = torch.utils.data.get_worker_info()
             self.rng = np.random.default_rng(seed=worker_info.id)
 
-        # PIL ？？？
         img1 = query_PIL_image
         img2 = database_PIL_image # img1 warp to img2
 
