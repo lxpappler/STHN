@@ -547,7 +547,7 @@ def fetch_dataloader(args, split='train'):
 
     if split == 'train' or split == 'extended':
         train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                        pin_memory=True, shuffle=True, num_workers=args.num_workers,
+                                        pin_memory=True, shuffle=False, num_workers=args.num_workers,
                                         drop_last=True, worker_init_fn=seed_worker)
     elif split == 'val' or split == 'test':
         g = torch.Generator()
