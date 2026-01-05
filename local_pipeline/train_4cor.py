@@ -124,7 +124,8 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop
         metrics["lr"] = model.scheduler_G.get_lr()
         toc = time.time()
         metrics['time'] = toc - tic
-
+        if total_steps >= 500:  # 比如 2 或 5
+            break
         if total_steps % 50 == 0:
             # 计算耗时：当前时间 - 开始时间
             elapsed_time = datetime.now() - start_time
