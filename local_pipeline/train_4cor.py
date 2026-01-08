@@ -66,17 +66,17 @@ def main(args, start_time):
     last_best_val_mace = None
     while total_steps <= args.num_steps:
         total_steps, last_best_val_mace, early_stop_counter = train(model, train_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time=start_time)
-        if total_steps >= 100:
-            print("Debug stop in main loop")
-            break
+        # if total_steps >= 300:
+        #     print("Debug stop in main loop")
+        #     break
         if early_stop_counter >= patience:
             logging.info("Training stopped by Early Stopping in main loop.")
             break
         if extended_loader is not None:
             total_steps, last_best_val_mace,early_stop_counter = train(model, extended_loader, args, total_steps, last_best_val_mace, early_stop_counter, patience, start_time=start_time, train_step_limit=len(train_loader))
-            if total_steps >= 100:
-                print("Debug stop in main loop")
-                break
+            # if total_steps >= 300:
+            #     print("Debug stop in main loop")
+            #     break
             if early_stop_counter >= patience:
                 logging.info("Training stopped by Early Stopping in main loop.")
                 break
@@ -96,22 +96,60 @@ def train(model, train_loader, args, total_steps, last_best_val_mace, early_stop
         model.set_input(image1, image2, flow)
         metrics = model.optimize_parameters()
 
-        if i_batch==0 and args.vis_all:
-            save_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img1.png')
-            save_img(torchvision.utils.make_grid(model.image_2, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img2.png')
-            save_overlap_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0),
-                            torchvision.utils.make_grid(model.real_warped_image_2, nrow=16, padding = 16, pad_value=0), 
-                            args.save_dir + '/train_overlap_gt.png')
+        # if i_batch==0 and args.vis_all:
+        #     save_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img1.png')
+        #     save_img(torchvision.utils.make_grid(model.image_2, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img2.png')
+        #     save_overlap_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0),
+        #                     torchvision.utils.make_grid(model.real_warped_image_2, nrow=16, padding = 16, pad_value=0), 
+        #                     args.save_dir + '/train_overlap_gt.png')
+        #     if not args.two_stages:
+        #         save_overlap_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0),
+        #                         torchvision.utils.make_grid(model.fake_warped_image_2, nrow=16, padding = 16, pad_value=0),
+        #                         args.save_dir + f'/train_overlap_pred.png')
+        #     else:
+        #         save_img(torchvision.utils.make_grid(model.image_1_crop, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img1_crop.png')
+        #         save_img(torchvision.utils.make_grid(model.image_2_crop, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img2_crop.png')
+        #         save_overlap_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0),
+        #                         torchvision.utils.make_grid(model.fake_warped_image_2, nrow=16, padding = 16, pad_value=0),
+        #                         args.save_dir + f'/train_overlap_pred.png')
+        if i_batch == 0 and args.vis_all:
+            tag = f"step{total_steps}"
+
+            save_img(
+                torchvision.utils.make_grid(model.image_1, nrow=16, padding=16, pad_value=0),
+                f"{args.save_dir}/train_img1_{tag}.png"
+            )
+            save_img(
+                torchvision.utils.make_grid(model.image_2, nrow=16, padding=16, pad_value=0),
+                f"{args.save_dir}/train_img2_{tag}.png"
+            )
+            save_overlap_img(
+                torchvision.utils.make_grid(model.image_1, nrow=16, padding=16, pad_value=0),
+                torchvision.utils.make_grid(model.real_warped_image_2, nrow=16, padding=16, pad_value=0),
+                f"{args.save_dir}/train_overlap_gt_{tag}.png"
+            )
+
             if not args.two_stages:
-                save_overlap_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0),
-                                torchvision.utils.make_grid(model.fake_warped_image_2, nrow=16, padding = 16, pad_value=0),
-                                args.save_dir + f'/train_overlap_pred.png')
+                save_overlap_img(
+                    torchvision.utils.make_grid(model.image_1, nrow=16, padding=16, pad_value=0),
+                    torchvision.utils.make_grid(model.fake_warped_image_2, nrow=16, padding=16, pad_value=0),
+                    f"{args.save_dir}/train_overlap_pred_{tag}.png"
+                )
             else:
-                save_img(torchvision.utils.make_grid(model.image_1_crop, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img1_crop.png')
-                save_img(torchvision.utils.make_grid(model.image_2_crop, nrow=16, padding = 16, pad_value=0), args.save_dir + '/train_img2_crop.png')
-                save_overlap_img(torchvision.utils.make_grid(model.image_1, nrow=16, padding = 16, pad_value=0),
-                                torchvision.utils.make_grid(model.fake_warped_image_2, nrow=16, padding = 16, pad_value=0),
-                                args.save_dir + f'/train_overlap_pred.png')
+                save_img(
+                    torchvision.utils.make_grid(model.image_1_crop, nrow=16, padding=16, pad_value=0),
+                    f"{args.save_dir}/train_img1_crop_{tag}.png"
+                )
+                save_img(
+                    torchvision.utils.make_grid(model.image_2_crop, nrow=16, padding=16, pad_value=0),
+                    f"{args.save_dir}/train_img2_crop_{tag}.png"
+                )
+                save_overlap_img(
+                    torchvision.utils.make_grid(model.image_1, nrow=16, padding=16, pad_value=0),
+                    torchvision.utils.make_grid(model.fake_warped_image_2, nrow=16, padding=16, pad_value=0),
+                    f"{args.save_dir}/train_overlap_pred_{tag}.png"
+                )
+
         model.update_learning_rate()
         if torch.isnan(model.loss_G):
             weights = model.optimizer_G.param_groups[0]['params']
