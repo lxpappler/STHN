@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import time
 import random
@@ -46,6 +46,8 @@ class IHN(nn.Module):
 
         self.imagenet_mean = None
         self.imagenet_std = None
+        self.debug_trace = []
+        self.debug_corr_maps = []
     def get_flow_now_4(self, four_point):
         four_point = four_point / 4
         four_point_org = torch.zeros((2, 2, 2)).to(four_point.device)
@@ -143,20 +145,80 @@ class IHN(nn.Module):
         self.sz = sz
         four_point_disp = torch.zeros((sz[0], 2, 2, 2)).to(fmap1.device)
         four_point_predictions = []
+
+        diagnose_corr = bool(getattr(self.args, 'diagnose_corr', False))
+        self.debug_trace = []
+        self.debug_corr_maps = []
+        prev_delta_flat = None
+
         # time1 = time.time()
         for itr in range(iters_lev0):
             corr = corr_fn(coords1)
             flow = coords1 - coords0
+
+            corr_entropy = float('nan')
+            corr_peak_rel_margin = float('nan')
+            corr_multipeak_ratio = float('nan')
+            corr_std = float('nan')
+
+            if diagnose_corr:
+                with torch.no_grad():
+                    corr_det = corr.detach().float()
+                    bsz, channels, ht, wd = corr_det.shape
+                    corr_tokens = corr_det.permute(0, 2, 3, 1).reshape(bsz, -1, channels)
+                    topk_vals = torch.topk(corr_tokens, k=min(2, channels), dim=-1).values
+                    top1 = topk_vals[..., 0]
+                    top2 = topk_vals[..., 1] if channels > 1 else torch.zeros_like(top1)
+                    corr_peak_rel_margin = (((top1 - top2) / (top1.abs() + 1e-6)).mean()).item()
+                    corr_std = corr_tokens.std(dim=-1).mean().item()
+                    probs = torch.softmax(corr_tokens, dim=-1)
+                    corr_entropy = (-(probs * torch.log(probs + 1e-12)).sum(dim=-1) / np.log(channels)).mean().item()
+                    corr_multipeak_ratio = (((top1 - top2) / (top1.abs() + 1e-6)) < 0.05).float().mean().item()
+
+                    if len(self.debug_corr_maps) < 2 and bsz > 0:
+                        level0_channels = (2 * corr_radius + 1) * (2 * corr_radius + 1)
+                        if channels >= level0_channels:
+                            mid_h, mid_w = ht // 2, wd // 2
+                            corr_map = corr_det[0, :level0_channels, mid_h, mid_w].reshape(2 * corr_radius + 1, 2 * corr_radius + 1)
+                            self.debug_corr_maps.append({
+                                'iter': int(itr),
+                                'map': corr_map.cpu().numpy().tolist(),
+                            })
+
             # print(corr.shape, flow.shape)
             with autocast(enabled=self.args.mixed_precision):
                 if self.args.weight:
                     delta_four_point, weight = self.update_block_4(corr, flow)
                 else:
                     delta_four_point = self.update_block_4(corr, flow)
-                    
+
+            with torch.no_grad():
+                delta_flat = delta_four_point.detach().float().reshape(delta_four_point.shape[0], -1)
+                delta_norm = torch.norm(delta_flat, dim=1).mean().item()
+                if prev_delta_flat is None:
+                    delta_cosine = float('nan')
+                    delta_flip_ratio = float('nan')
+                else:
+                    cosine = F.cosine_similarity(delta_flat, prev_delta_flat, dim=1)
+                    delta_cosine = cosine.mean().item()
+                    delta_flip_ratio = (cosine < 0).float().mean().item()
+                prev_delta_flat = delta_flat
+
+                if diagnose_corr:
+                    self.debug_trace.append({
+                        'iter': int(itr),
+                        'corr_entropy': float(corr_entropy),
+                        'corr_peak_rel_margin': float(corr_peak_rel_margin),
+                        'corr_multipeak_ratio': float(corr_multipeak_ratio),
+                        'corr_std': float(corr_std),
+                        'delta_norm': float(delta_norm),
+                        'delta_cosine': float(delta_cosine),
+                        'delta_flip_ratio': float(delta_flip_ratio),
+                    })
+
             try:
                 last_four_point_disp = four_point_disp
-                four_point_disp =  four_point_disp + delta_four_point
+                four_point_disp = four_point_disp + delta_four_point
                 coords1 = self.get_flow_now_4(four_point_disp) # Possible error: Unsolvable H
                 four_point_predictions.append(four_point_disp)
             except Exception as e:
@@ -189,6 +251,7 @@ class STHN():
         self.four_point_org_large_single[:, :, 1, 1] = torch.Tensor([self.args.database_size - 1, self.args.database_size - 1]).to(self.device) # Only to calculate flow so no -1
         self.netG = arch_list[args.arch](args, True)
         self.shift_flow_bbox = None
+        self.debug_outputs = {}
         if args.two_stages:
             corr_level = args.corr_level
             args.corr_level = 2
@@ -241,10 +304,20 @@ class STHN():
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         # time1 = time.time()
         self.four_preds_list, self.four_pred = self.netG(image1=self.image_1, image2=self.image_2, iters_lev0=self.args.iters_lev0, corr_level=self.args.corr_level)
+        self.debug_outputs = {
+            'coarse': {
+                'trace': getattr(self.netG, 'debug_trace', []),
+                'corr_maps': getattr(self.netG, 'debug_corr_maps', []),
+            }
+        }
         if self.args.two_stages:
             self.image_1_crop, delta, self.flow_bbox = self.get_cropped_st_images(self.image_1_ori, self.four_pred, self.args.fine_padding, self.args.detach, self.args.augment_two_stages)
             self.image_2_crop = self.image_2
             self.four_preds_list_fine, self.four_pred_fine = self.netG_fine(image1=self.image_1_crop, image2=self.image_2_crop, iters_lev0=self.args.iters_lev1)
+            self.debug_outputs['fine'] = {
+                'trace': getattr(self.netG_fine, 'debug_trace', []),
+                'corr_maps': getattr(self.netG_fine, 'debug_corr_maps', []),
+            }
             self.four_preds_list, self.four_pred = self.combine_coarse_fine(self.four_preds_list, self.four_pred, self.four_preds_list_fine, self.four_pred_fine, delta, self.flow_bbox, for_training)
         if self.args.vis_all:
             self.fake_warped_image_2 = mywarp(self.image_2, self.four_pred, self.four_point_org_single) # Comment for performance evaluation
@@ -344,7 +417,7 @@ class STHN():
         """Update learning rates for all the networks; called at the end of every epoch"""
         self.scheduler_G.step()
 
-# 将卫星图投影变化回热红外图 ？？？
+# Warp satellite to thermal frame
 def mywarp(x, flow_pred, four_point_org_single, ue_std=None):
     """
     warp an image/tensor (im2) back to im1, according to the optical flow
@@ -375,3 +448,4 @@ def mywarp(x, flow_pred, four_point_org_single, ue_std=None):
         logging.debug("Output NaN by model error.")
         warped_image = x
     return warped_image
+

@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -61,6 +61,13 @@ def parse_arguments():
     parser.add_argument("--load_test_pairs", type=str, default=None)
     parser.add_argument('--multi_aug_eval', action='store_true', help='Enable multi-augmentation evaluation')
     parser.add_argument('--run_name', type=str, default='default_run', help='W&B run name')
+    parser.add_argument('--diagnose_corr', action='store_true', help='Enable correlation-volume and iterative-update diagnostics')
+    parser.add_argument('--diag_batches', type=int, default=200, help='Max batches to aggregate for diagnostics')
+    parser.add_argument('--diag_save_map_batches', type=int, default=8, help='Number of batches to save correlation heatmaps for')
+    parser.add_argument('--diag_entropy_thr', type=float, default=0.85, help='High-entropy threshold for feature bottleneck diagnosis')
+    parser.add_argument('--diag_peak_margin_thr', type=float, default=0.10, help='Low peak margin threshold for feature bottleneck diagnosis')
+    parser.add_argument('--diag_multipeak_thr', type=float, default=0.35, help='Multi-peak ratio threshold for feature bottleneck diagnosis')
+    parser.add_argument('--diag_flip_thr', type=float, default=0.30, help='Delta oscillation threshold for iterative bottleneck diagnosis')
     args = parser.parse_args()
     args.save_dir = "local_he"
     args.augment_type = "center"

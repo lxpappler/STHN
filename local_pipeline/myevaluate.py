@@ -1,5 +1,6 @@
-import numpy as np
+﻿import numpy as np
 import os
+import json
 import torch
 import argparse
 from model.network import STHN
@@ -21,6 +22,183 @@ from os.path import join
 import commons
 import logging
 import wandb
+
+def _init_diag_state():
+    return {
+        "coarse": {},
+        "fine": {},
+        "corr_maps": {"coarse": [], "fine": []},
+        "num_batches": 0,
+    }
+
+
+def _update_diag_state(diag_state, model_debug_outputs, args, batch_idx):
+    if not model_debug_outputs:
+        return
+
+    for stage_name in ["coarse", "fine"]:
+        stage_data = model_debug_outputs.get(stage_name)
+        if stage_data is None:
+            continue
+
+        for record in stage_data.get("trace", []):
+            itr = int(record.get("iter", -1))
+            if itr < 0:
+                continue
+            stage_bucket = diag_state[stage_name].setdefault(itr, {
+                "corr_entropy": [],
+                "corr_peak_rel_margin": [],
+                "corr_multipeak_ratio": [],
+                "corr_std": [],
+                "delta_norm": [],
+                "delta_cosine": [],
+                "delta_flip_ratio": [],
+            })
+            for key in stage_bucket.keys():
+                val = float(record.get(key, float("nan")))
+                if np.isfinite(val):
+                    stage_bucket[key].append(val)
+
+        if batch_idx < args.diag_save_map_batches:
+            for corr_map_obj in stage_data.get("corr_maps", []):
+                if len(diag_state["corr_maps"][stage_name]) >= args.diag_save_map_batches:
+                    break
+                diag_state["corr_maps"][stage_name].append(corr_map_obj)
+
+
+def _plot_diag_curves(stage_name, stage_bucket, save_dir):
+    if not stage_bucket:
+        return {}
+
+    sorted_iters = sorted(stage_bucket.keys())
+    summary = {}
+    for metric in [
+        "corr_entropy",
+        "corr_peak_rel_margin",
+        "corr_multipeak_ratio",
+        "corr_std",
+        "delta_norm",
+        "delta_cosine",
+        "delta_flip_ratio",
+    ]:
+        ys = []
+        for itr in sorted_iters:
+            vals = stage_bucket[itr][metric]
+            ys.append(float(np.mean(vals)) if len(vals) > 0 else float("nan"))
+
+        summary[metric] = ys
+        if np.all(np.isnan(np.array(ys))):
+            continue
+
+        plt.figure(figsize=(6, 4))
+        plt.plot(sorted_iters, ys, marker="o")
+        plt.xlabel("Iteration")
+        plt.ylabel(metric)
+        plt.title(f"{stage_name}: {metric}")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, f"diag_{stage_name}_{metric}.png"))
+        plt.close()
+
+    summary["iters"] = sorted_iters
+    return summary
+
+
+def _save_corr_maps(diag_state, save_dir):
+    for stage_name in ["coarse", "fine"]:
+        for idx, corr_map_obj in enumerate(diag_state["corr_maps"][stage_name]):
+            corr_map = np.array(corr_map_obj["map"], dtype=np.float32)
+            itr = corr_map_obj.get("iter", -1)
+
+            plt.figure(figsize=(4, 4))
+            plt.imshow(corr_map, cmap="viridis")
+            plt.colorbar()
+            plt.title(f"{stage_name} corr map (iter={itr})")
+            plt.tight_layout()
+            plt.savefig(os.path.join(save_dir, f"diag_{stage_name}_corrmap_{idx:02d}_iter{itr}.png"))
+            plt.close()
+
+
+def _diagnose_bottleneck(diag_summary, args):
+    coarse = diag_summary.get("coarse", {})
+    entropy = np.array(coarse.get("corr_entropy", []), dtype=np.float32)
+    peak_margin = np.array(coarse.get("corr_peak_rel_margin", []), dtype=np.float32)
+    multipeak = np.array(coarse.get("corr_multipeak_ratio", []), dtype=np.float32)
+    delta_flip = np.array(coarse.get("delta_flip_ratio", []), dtype=np.float32)
+
+    mean_entropy = float(np.nanmean(entropy)) if entropy.size else float("nan")
+    mean_peak_margin = float(np.nanmean(peak_margin)) if peak_margin.size else float("nan")
+    mean_multipeak = float(np.nanmean(multipeak)) if multipeak.size else float("nan")
+    mean_flip = float(np.nanmean(delta_flip)) if delta_flip.size else float("nan")
+
+    feature_bottleneck = (
+        np.isfinite(mean_entropy)
+        and np.isfinite(mean_peak_margin)
+        and np.isfinite(mean_multipeak)
+        and mean_entropy >= args.diag_entropy_thr
+        and mean_peak_margin <= args.diag_peak_margin_thr
+        and mean_multipeak >= args.diag_multipeak_thr
+    )
+
+    iterative_bottleneck = (
+        np.isfinite(mean_peak_margin)
+        and np.isfinite(mean_entropy)
+        and np.isfinite(mean_flip)
+        and mean_peak_margin > args.diag_peak_margin_thr
+        and mean_entropy < args.diag_entropy_thr
+        and mean_flip >= args.diag_flip_thr
+    )
+
+    if feature_bottleneck:
+        verdict = "feature_extractor_bottleneck"
+    elif iterative_bottleneck:
+        verdict = "iterative_updater_bottleneck"
+    else:
+        verdict = "inconclusive"
+
+    return {
+        "verdict": verdict,
+        "mean_corr_entropy": mean_entropy,
+        "mean_corr_peak_rel_margin": mean_peak_margin,
+        "mean_corr_multipeak_ratio": mean_multipeak,
+        "mean_delta_flip_ratio": mean_flip,
+        "thresholds": {
+            "diag_entropy_thr": args.diag_entropy_thr,
+            "diag_peak_margin_thr": args.diag_peak_margin_thr,
+            "diag_multipeak_thr": args.diag_multipeak_thr,
+            "diag_flip_thr": args.diag_flip_thr,
+        },
+    }
+
+
+def _finalize_diag(diag_state, args):
+    diag_dir = os.path.join(args.save_dir, "diagnostics")
+    os.makedirs(diag_dir, exist_ok=True)
+
+    diag_summary = {
+        "coarse": _plot_diag_curves("coarse", diag_state["coarse"], diag_dir),
+        "fine": _plot_diag_curves("fine", diag_state["fine"], diag_dir),
+    }
+    _save_corr_maps(diag_state, diag_dir)
+
+    diagnosis = _diagnose_bottleneck(diag_summary, args)
+    payload = {
+        "num_batches": diag_state["num_batches"],
+        "diagnosis": diagnosis,
+        "summary": diag_summary,
+    }
+
+    with open(os.path.join(diag_dir, "diagnosis_report.json"), "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+    logging.info(f"Diagnostic verdict: {diagnosis['verdict']}")
+    logging.info(
+        f"Diagnostic means -> entropy={diagnosis['mean_corr_entropy']:.4f}, "
+        f"peak_margin={diagnosis['mean_corr_peak_rel_margin']:.4f}, "
+        f"multipeak={diagnosis['mean_corr_multipeak_ratio']:.4f}, "
+        f"delta_flip={diagnosis['mean_delta_flip_ratio']:.4f}"
+    )
+
 
 def test(args, wandb_log):
     if not args.identity:
@@ -86,7 +264,12 @@ def evaluate_SNet(model, val_dataset, batch_size=0, args = None, wandb_log=False
     mace_conf_list = []
     if args.generate_test_pairs:
         test_pairs = torch.zeros(len(val_dataset.dataset), dtype=torch.long)
+
+    diag_state = _init_diag_state() if args.diagnose_corr else None
+
     for i_batch, data_blob in enumerate(tqdm(val_dataset)):
+        if args.diagnose_corr and i_batch >= args.diag_batches:
+            break
         img1, img2, flow_gt, H, query_utm, database_utm, index, pos_index = [x for x in data_blob]
         if args.generate_test_pairs:
             test_pairs[index] = pos_index
@@ -117,6 +300,9 @@ def evaluate_SNet(model, val_dataset, batch_size=0, args = None, wandb_log=False
             if not args.identity:
                 # time_start = time.time()
                 model.forward()
+                if args.diagnose_corr:
+                    _update_diag_state(diag_state, getattr(model, 'debug_outputs', {}), args, i_batch)
+                    diag_state['num_batches'] += 1
                 # time_end = time.time()
                 four_pred = model.four_pred
                 # timeall.append(time_end-time_start)
@@ -233,6 +419,10 @@ def evaluate_SNet(model, val_dataset, batch_size=0, args = None, wandb_log=False
     np.save(args.save_dir + '/resnpy.npy', total_mace.numpy())
     io.savemat(args.save_dir + '/flowmat', {'matrix': total_flow.numpy()})
     np.save(args.save_dir + '/flownpy.npy', total_flow.numpy())
+
+    if args.diagnose_corr:
+        _finalize_diag(diag_state, args)
+
     plot_hist_helper(args.save_dir)
 
 if __name__ == '__main__':
@@ -254,3 +444,6 @@ if __name__ == '__main__':
     if wandb_log:
         wandb.init(project="STHN-eval", entity="xjh19971", config=vars(args))
     test(args, wandb_log)
+
+
+
