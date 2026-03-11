@@ -1,5 +1,5 @@
 # 选择 GPU
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=5
 
 # 初始化 conda
 eval "$(/Share/data/liuxp/anaconda3/bin/conda shell.bash hook)"
@@ -18,15 +18,21 @@ DATASET=satellite_0_thermalmapping_135_train
 D_C=512
 MODEL=logs/local_he/20251229_024813_gnode_larger_512_mini_32
 
+# 诊断参数
+DIAG_BATCHES=200
+DIAG_MAP_BATCHES=8
+
 echo "Running with: DATASET=$DATASET D_C=$D_C MODEL=$MODEL"
 
-
-# ===== 运行 =====
+# ===== 运行（带性能诊断）=====
 python3 ./local_pipeline/myevaluate.py \
     --dataset_name ${DATASET} \
     --eval_model $MODEL/STHN.pth \
     --val_positive_dist_threshold ${D_C} \
-    --lev0 --database_size 1536 --corr_level 4 \
+    --lev0 --arch IHN --database_size 1536 --corr_level 4 \
     --test \
+    --diagnose_corr \
+    --diag_batches ${DIAG_BATCHES} \
+    --diag_save_map_batches ${DIAG_MAP_BATCHES} \
     1> eval.out \
     2> >(tee eval.err >&2)
