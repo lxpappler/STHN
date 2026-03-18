@@ -13,6 +13,7 @@ checkpoints/
 *.out
 *.err
 logs/
+test/
 wandb/
 AmazingNotes.md
 
